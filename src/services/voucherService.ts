@@ -1,51 +1,24 @@
 import { Voucher } from '../types';
-
-const API_URL = (import.meta as any).env.APP_URL || 'http://localhost:5000/api';
+import { api } from '../lib/api';
 
 export const VoucherService = {
   async getAll(): Promise<Voucher[]> {
-    const res = await fetch(`${API_URL}/vouchers`);
-    if (!res.ok) throw new Error('Failed to fetch vouchers');
-    return res.json();
+    return api.get<Voucher[]>('/vouchers');
   },
 
   async create(data: Omit<Voucher, 'id' | 'created_at'>): Promise<Voucher> {
-    const res = await fetch(`${API_URL}/vouchers`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to create voucher');
-    return res.json();
+    return api.post<Voucher>('/vouchers', data);
   },
 
   async update(id: string, data: Partial<Voucher>): Promise<Voucher> {
-    const res = await fetch(`${API_URL}/vouchers/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to update voucher');
-    return res.json();
+    return api.put<Voucher>(`/vouchers/${id}`, data);
   },
 
   async delete(id: string): Promise<void> {
-    const res = await fetch(`${API_URL}/vouchers/${id}`, {
-      method: 'DELETE',
-    });
-    if (!res.ok) throw new Error('Failed to delete voucher');
+    return api.delete<void>(`/vouchers/${id}`);
   },
 
   async validate(code: string): Promise<Voucher> {
-    const res = await fetch(`${API_URL}/vouchers/validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message || 'Failed to validate voucher');
-    }
-    return res.json();
+    return api.post<Voucher>('/vouchers/validate', { code });
   }
 };
