@@ -695,7 +695,7 @@ export default function Transactions() {
                     </div>
                   )}
 
-                  {formData.iphone_id && (
+                  {formData.item_id && (
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1">Kode Voucher (Opsional)</label>
                       <div className="flex space-x-2">
