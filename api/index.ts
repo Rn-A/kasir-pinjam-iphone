@@ -293,8 +293,28 @@ async function initDB() {
   }
 }
 
-// Initialize the Database
-initDB();
+let dbInitialized = false;
+let dbInitializingPromise: Promise<void> | null = null;
+
+async function ensureDB() {
+  if (dbInitialized) return;
+  if (!dbInitializingPromise) {
+    dbInitializingPromise = initDB().then(() => {
+      dbInitialized = true;
+    });
+  }
+  return dbInitializingPromise;
+}
+
+// Middleware to ensure DB is connected before handling requests
+app.use(async (req, res, next) => {
+  try {
+    await ensureDB();
+    next();
+  } catch (err: any) {
+    res.status(500).json({ error: 'Database initialization failed: ' + err.message });
+  }
+});
 
 // ==========================================
 // API ENDPOINTS
@@ -909,7 +929,11 @@ app.put('/api/transactions/:id', async (req, res) => {
 });
 
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// Start the server only in local development
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+export default app;
