@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 
 export const AuthService = {
   async getSession(): Promise<User | null> {
-    const mockUser = localStorage.getItem('mock_user');
+    const mockUser = sessionStorage.getItem('mock_user');
     if (!mockUser) return null;
 
     try {
@@ -12,7 +12,7 @@ export const AuthService = {
       return user;
     } catch (err) {
       console.error('Session validation failed:', err);
-      localStorage.removeItem('mock_user');
+      sessionStorage.removeItem('mock_user');
       return null;
     }
   },
@@ -20,8 +20,8 @@ export const AuthService = {
   async login(email: string, pass: string): Promise<User> {
     try {
       const user = await api.post<User>('/auth/login', { email, password: pass });
-      // Keep in localStorage for fast UI state restoration and session header
-      localStorage.setItem('mock_user', JSON.stringify(user));
+      // Keep in sessionStorage for fast UI state restoration and session header
+      sessionStorage.setItem('mock_user', JSON.stringify(user));
       return user;
     } catch (err: any) {
       throw new Error(err.message || 'Email atau password salah');
@@ -29,7 +29,7 @@ export const AuthService = {
   },
 
   async logout(): Promise<void> {
-    localStorage.removeItem('mock_user');
+    sessionStorage.removeItem('mock_user');
   },
 
   async updateAccount(data: {
@@ -39,7 +39,7 @@ export const AuthService = {
   }): Promise<User> {
     try {
       const user = await api.put<User>('/auth/account', data);
-      localStorage.setItem('mock_user', JSON.stringify(user));
+      sessionStorage.setItem('mock_user', JSON.stringify(user));
       return user;
     } catch (err: any) {
       throw new Error(err.message || 'Gagal memperbarui akun.');

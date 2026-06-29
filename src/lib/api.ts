@@ -12,7 +12,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   // Inject authentication header using saved user id as session token
-  const mockUserStr = localStorage.getItem('mock_user');
+  const mockUserStr = sessionStorage.getItem('mock_user');
   if (mockUserStr) {
     try {
       const user = JSON.parse(mockUserStr);
