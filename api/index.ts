@@ -152,7 +152,7 @@ async function initDB() {
         \`price_24h\` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
         \`daily_price\` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
         \`color\` VARCHAR(50) NOT NULL DEFAULT '',
-        \`status\` ENUM('available', 'rented', 'maintenance') DEFAULT 'available',
+        \`status\` ENUM('available', 'rented', 'maintenance', 'deleted') DEFAULT 'available',
         \`image_url\` LONGTEXT DEFAULT NULL,
         \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB;
@@ -221,6 +221,14 @@ async function initDB() {
       if (e.code !== 'ER_DUP_FIELDNAME') {
         console.error('Migration error (vouchers expires_at column):', e.message);
       }
+    }
+
+    // Modify status column in items to include 'deleted' status if not exists
+    try {
+      await pool.query("ALTER TABLE `items` MODIFY COLUMN `status` ENUM('available', 'rented', 'maintenance', 'deleted') DEFAULT 'available'");
+      console.log('Column "status" in "items" modified to include "deleted".');
+    } catch (e: any) {
+      console.error('Migration error (items status column update):', e.message);
     }
 
     // Add reset_token and reset_token_expires columns to users if not exists
@@ -528,7 +536,7 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
 // 2. ITEMS CRUD
 app.get('/api/items', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM `items` ORDER BY `created_at` DESC') as any[];
+    const [rows] = await pool.query('SELECT * FROM `items` WHERE `status` != "deleted" ORDER BY `created_at` DESC') as any[];
     // Convert status and decimal strings to proper types
     const formatted = rows.map((i: any) => ({
       ...i,
@@ -606,7 +614,7 @@ app.put('/api/items/:id', async (req, res) => {
 
 app.delete('/api/items/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM `items` WHERE `id` = ?', [req.params.id]);
+    await pool.query('UPDATE `items` SET `status` = "deleted" WHERE `id` = ?', [req.params.id]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
