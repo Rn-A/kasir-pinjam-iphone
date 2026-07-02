@@ -95,7 +95,11 @@ async function initDB() {
       if (itemsTableExists.length > 0) {
         const [itemsCols] = await pool.query("SHOW COLUMNS FROM `items` LIKE 'imei'") as any[];
         if (itemsCols.length > 0) {
-          await pool.query("ALTER TABLE `items` CHANGE COLUMN `imei` `serial_number` VARCHAR(50) NOT NULL UNIQUE");
+          try {
+            await pool.query("ALTER TABLE `items` RENAME COLUMN `imei` TO `serial_number`");
+          } catch (renameErr) {
+            await pool.query("ALTER TABLE `items` CHANGE COLUMN `imei` `serial_number` VARCHAR(50) NOT NULL UNIQUE");
+          }
           console.log('Column "imei" in "items" renamed to "serial_number".');
         }
       }
