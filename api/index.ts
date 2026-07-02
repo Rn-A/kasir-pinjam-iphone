@@ -928,13 +928,54 @@ app.put('/api/transactions/:id', async (req, res) => {
 
     await pool.query(`UPDATE \`transactions\` SET ${setClause} WHERE \`id\` = ?`, [...values, id]);
 
-    // If status is updated to completed/late, free up the item
-    if (fields.status === 'completed' || fields.status === 'late') {
+    // Handle item status changes based on update:
+    const currentItem = fields.item_id || oldTx.item_id;
+    const currentStatus = fields.status || oldTx.status;
+
+    // If item_id changed:
+    if (fields.item_id && fields.item_id !== oldTx.item_id) {
+      // Free up old item
       await pool.query('UPDATE `items` SET `status` = "available" WHERE `id` = ?', [oldTx.item_id]);
+      // Rent new item if status is active
+      if (currentStatus === 'active') {
+        await pool.query('UPDATE `items` SET `status` = "rented" WHERE `id` = ?', [fields.item_id]);
+      }
+    } else {
+      // If item_id did not change, but status changed:
+      if (fields.status && fields.status !== oldTx.status) {
+        if (fields.status === 'completed' || fields.status === 'late') {
+          await pool.query('UPDATE `items` SET `status` = "available" WHERE `id` = ?', [oldTx.item_id]);
+        } else if (fields.status === 'active') {
+          await pool.query('UPDATE `items` SET `status` = "rented" WHERE `id` = ?', [oldTx.item_id]);
+        }
+      }
     }
 
     const [rows] = await pool.query('SELECT * FROM `transactions` WHERE `id` = ?', [id]) as any[];
     res.json(rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/transactions/:id', async (req, res) => {
+  const id = req.params.id;
+  try {
+    const [rows] = await pool.query('SELECT * FROM `transactions` WHERE `id` = ?', [id]) as any[];
+    if (rows.length === 0) return res.status(404).json({ message: 'Transaction not found' });
+    const tx = rows[0];
+
+    await pool.query('DELETE FROM `transactions` WHERE `id` = ?', [id]);
+
+    // If transaction was active/late (not completed), free up the item
+    if (tx.status === 'active' || tx.status === 'late') {
+      const [otherActive] = await pool.query('SELECT * FROM `transactions` WHERE `item_id` = ? AND `status` = "active" AND `id` != ?', [tx.item_id, id]) as any[];
+      if (otherActive.length === 0) {
+        await pool.query('UPDATE `items` SET `status` = "available" WHERE `id` = ?', [tx.item_id]);
+      }
+    }
+
+    res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

@@ -13,6 +13,10 @@ export const TransactionService = {
   async update(id: string, transaction: Partial<Transaction>): Promise<Transaction> {
     return api.put<Transaction>(`/transactions/${id}`, transaction);
   },
+
+  async delete(id: string): Promise<void> {
+    await api.delete<void>(`/transactions/${id}`);
+  },
   
   async getById(id: string): Promise<Transaction | null> {
     try {

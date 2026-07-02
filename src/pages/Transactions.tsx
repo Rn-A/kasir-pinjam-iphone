@@ -6,7 +6,7 @@ import { VoucherService } from '../services/voucherService';
 import { Transaction, Customer, Item, Voucher } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
 import { addDays, format, isAfter, differenceInDays, differenceInHours, differenceInMinutes, isToday, isSameWeek, isSameMonth, isSameYear } from 'date-fns';
-import { Plus, CheckCircle, AlertTriangle, Printer, Search } from 'lucide-react';
+import { Plus, CheckCircle, AlertTriangle, Printer, Search, Edit2, Trash2 } from 'lucide-react';
 import { CountdownDisplay } from '../components/CountdownDisplay';
 import { LateTimerDisplay } from '../components/LateTimerDisplay';
 
@@ -20,13 +20,16 @@ export default function Transactions() {
   const [customDate, setCustomDate] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [previewTx, setPreviewTx] = useState<Transaction | null>(null);
   const [formData, setFormData] = useState({
     customer_id: '',
     item_id: '',
     start_date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     duration_hours: 24,
-    voucher_code: ''
+    voucher_code: '',
+    status: 'active' as 'active' | 'completed' | 'late',
+    actual_return_date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
   });
   const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
   const [voucherError, setVoucherError] = useState<string>('');
@@ -110,6 +113,60 @@ export default function Transactions() {
     }
   };
 
+  const openNew = () => {
+    setFormData({ 
+      customer_id: customers[0]?.id || '', 
+      item_id: items.filter(i => i.status === 'available')[0]?.id || '', 
+      start_date: format(new Date(), "yyyy-MM-dd'T'HH:mm"), 
+      duration_hours: 24,
+      voucher_code: '',
+      status: 'active',
+      actual_return_date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
+    });
+    setAppliedVoucher(null);
+    setVoucherError('');
+    setIsAddingCustomer(false);
+    setEditingId(null);
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (tx: Transaction) => {
+    setFormData({
+      customer_id: tx.customer_id,
+      item_id: tx.item_id,
+      start_date: format(new Date(tx.start_date), "yyyy-MM-dd'T'HH:mm"),
+      duration_hours: tx.duration_hours,
+      voucher_code: tx.voucher_code || '',
+      status: tx.status,
+      actual_return_date: tx.actual_return_date 
+        ? format(new Date(tx.actual_return_date), "yyyy-MM-dd'T'HH:mm")
+        : format(new Date(), "yyyy-MM-dd'T'HH:mm")
+    });
+    if (tx.voucher_code) {
+      VoucherService.validate(tx.voucher_code)
+        .then(v => setAppliedVoucher(v))
+        .catch(() => setAppliedVoucher(null));
+    } else {
+      setAppliedVoucher(null);
+    }
+    setVoucherError('');
+    setEditingId(tx.id);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Apakah Anda yakin ingin menghapus transaksi ini? Status barang akan dikembalikan menjadi "Tersedia" jika sewa masih aktif.')) {
+      try {
+        await TransactionService.delete(id);
+        fetchData();
+        alert('Transaksi berhasil dihapus.');
+      } catch (err) {
+        console.error(err);
+        alert('Gagal menghapus transaksi.');
+      }
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     const item = items.find(i => i.id === formData.item_id);
@@ -137,16 +194,31 @@ export default function Transactions() {
     }
 
     try {
-      await TransactionService.create({
-        customer_id: formData.customer_id,
-        item_id: formData.item_id,
-        start_date: formData.start_date,
-        duration_hours: formData.duration_hours,
-        total_price: price - discountAmount,
-        discount_amount: discountAmount,
-        voucher_code: appliedVoucher ? appliedVoucher.code : undefined,
-        status: 'active'
-      });
+      if (editingId) {
+        const isFinished = formData.status === 'completed' || formData.status === 'late';
+        await TransactionService.update(editingId, {
+          customer_id: formData.customer_id,
+          item_id: formData.item_id,
+          start_date: formData.start_date,
+          duration_hours: formData.duration_hours,
+          total_price: price - discountAmount,
+          discount_amount: discountAmount,
+          voucher_code: appliedVoucher ? appliedVoucher.code : null as any,
+          status: formData.status,
+          actual_return_date: isFinished ? formData.actual_return_date : null as any
+        });
+      } else {
+        await TransactionService.create({
+          customer_id: formData.customer_id,
+          item_id: formData.item_id,
+          start_date: formData.start_date,
+          duration_hours: formData.duration_hours,
+          total_price: price - discountAmount,
+          discount_amount: discountAmount,
+          voucher_code: appliedVoucher ? appliedVoucher.code : undefined,
+          status: 'active'
+        });
+      }
       setIsModalOpen(false);
       fetchData();
     } catch (err) {
@@ -384,23 +456,7 @@ export default function Transactions() {
           <p className="text-sm text-slate-500">Buat transaksi baru dan pantau pengembalian barang.</p>
         </div>
         <button
-          onClick={() => {
-             setFormData({ 
-               customer_id: customers[0]?.id || '', 
-               item_id: items.filter(i => i.status === 'available')[0]?.id || '', 
-               start_date: format(new Date(), "yyyy-MM-dd'T'HH:mm"), 
-               duration_hours: 24,
-               voucher_code: ''
-             });
-             setAppliedVoucher(null);
-             setVoucherError('');
-             setIsAddingCustomer(false);
-             setNewCustName('');
-             setNewCustPhone('');
-             setNewCustAddress('');
-             setCustSaveError('');
-             setIsModalOpen(true);
-          }}
+          onClick={openNew}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium inline-flex items-center transition-colors shadow-sm cursor-pointer"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -513,7 +569,7 @@ export default function Transactions() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => setPreviewTx(tx)}
-                          className="inline-flex items-center text-xs bg-slate-50 text-slate-700 font-medium px-2.5 py-1.5 rounded border border-slate-200 hover:bg-slate-100"
+                          className="inline-flex items-center text-xs bg-slate-50 text-slate-700 font-medium px-2.5 py-1.5 rounded border border-slate-200 hover:bg-slate-100 cursor-pointer"
                         >
                           <Printer className="w-3.5 h-3.5 mr-1" /> Struk
                         </button>
@@ -524,11 +580,23 @@ export default function Transactions() {
                               setReturnTimeMode('now');
                               setCustomReturnTime(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
                             }}
-                            className="inline-flex items-center text-xs bg-emerald-50 text-emerald-700 font-medium px-2.5 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100"
+                            className="inline-flex items-center text-xs bg-emerald-50 text-emerald-700 font-medium px-2.5 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 cursor-pointer"
                           >
                             <CheckCircle className="w-4 h-4 mr-1" /> Kembalikan
                           </button>
                         )}
+                        <button
+                          onClick={() => openEdit(tx)}
+                          className="inline-flex items-center text-xs bg-blue-50 text-blue-700 font-medium px-2.5 py-1.5 rounded border border-blue-200 hover:bg-blue-100 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 mr-1" /> Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(tx.id)}
+                          className="inline-flex items-center text-xs bg-red-50 text-red-700 font-medium px-2.5 py-1.5 rounded border border-red-200 hover:bg-red-100 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1" /> Hapus
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -543,7 +611,7 @@ export default function Transactions() {
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setIsModalOpen(false)} />
              <div className="relative bg-white rounded-xl max-w-md w-full p-6 text-left shadow-lg border border-slate-200 transform transition-all">
-               <h3 className="text-lg font-bold text-slate-900 mb-4">Sewa Barang Baru</h3>
+               <h3 className="text-lg font-bold text-slate-900 mb-4">{editingId ? 'Edit Transaksi Sewa' : 'Sewa Barang Baru'}</h3>
                <form onSubmit={handleCreate} className="space-y-4">
                   <div>
                     {!isAddingCustomer ? (
@@ -643,7 +711,7 @@ export default function Transactions() {
                       className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
                     >
                       <option value="">Pilih Barang...</option>
-                       {items.filter(i => i.status === 'available').map(i => (
+                       {items.filter(i => i.status === 'available' || i.id === formData.item_id).map(i => (
                         <option key={i.id} value={i.id}>[{i.category || 'iPhone'}] {i.name} - S/N: {i.serial_number}</option>
                       ))}
                     </select>
@@ -756,9 +824,38 @@ export default function Transactions() {
                     </div>
                   )}
 
+                  {editingId && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">Status Transaksi</label>
+                        <select
+                          value={formData.status}
+                          onChange={e => setFormData(p => ({ ...p, status: e.target.value as any }))}
+                          className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        >
+                          <option value="active">Aktif</option>
+                          <option value="completed">Selesai</option>
+                          <option value="late">Terlambat</option>
+                        </select>
+                      </div>
+                      {(formData.status === 'completed' || formData.status === 'late') && (
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Waktu Dikembalikan</label>
+                          <input
+                            type="datetime-local"
+                            required
+                            value={formData.actual_return_date}
+                            onChange={e => setFormData(p => ({ ...p, actual_return_date: e.target.value }))}
+                            className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="mt-6 flex justify-end space-x-3">
                      <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 text-sm font-medium transition-colors cursor-pointer">Batal</button>
-                     <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors cursor-pointer">Proses Sewa</button>
+                     <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors cursor-pointer">{editingId ? 'Simpan Perubahan' : 'Proses Sewa'}</button>
                   </div>
                </form>
              </div>
